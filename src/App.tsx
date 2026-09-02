@@ -29,7 +29,9 @@ import {
 } from 'lucide-react';
 
 type Scene = 'discover' | 'playing' | 'post' | 'social';
-type FallbackMode = 'normal' | 'timeout' | 'no-knowledge';
+type FallbackMode = 'unavailable' | 'normal' | 'timeout' | 'no-knowledge';
+
+const modelUnavailableMessage = '暂未接入大模型，请稍后再试。';
 
 function Button({
   className = '',
@@ -126,7 +128,6 @@ function DiscoveryScene({ onStart }: { onStart: () => void }) {
       <div className="mx-auto max-w-5xl">
         <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <Badge className="mb-3 border border-cyan-300/20 bg-cyan-300/8 text-cyan-200">找 · DISCOVER</Badge>
             <h1 className="text-3xl font-semibold tracking-[-0.04em]">今晚想玩点什么？</h1>
             <p className="mt-2 text-sm text-slate-500">Agent 已结合你的时间、疲劳度和在线好友完成筛选。</p>
           </div>
@@ -305,7 +306,6 @@ function SocialScene() {
       <div className="mx-auto max-w-5xl">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <Badge className="mb-3 border border-emerald-300/20 bg-emerald-300/8 text-emerald-200">社 · SOCIAL</Badge>
             <h1 className="text-3xl font-semibold tracking-[-0.04em]">找到更合拍的队友</h1>
             <p className="mt-2 text-sm text-slate-500">基于位置、沟通习惯、活跃时间和本局节奏进行匹配。</p>
           </div>
@@ -361,10 +361,17 @@ function AgentPanel({
 
   const ask = () => {
     if (!question.trim()) return;
-    if (fallback === 'timeout') setAnswer('模型响应超时。已使用规则模板：先保证生存，再围绕下一地图资源行动。');
+    if (fallback === 'unavailable') setAnswer(modelUnavailableMessage);
+    else if (fallback === 'timeout') setAnswer('模型响应超时。已使用规则模板：先保证生存，再围绕下一地图资源行动。');
     else if (fallback === 'no-knowledge') setAnswer('当前知识不足，我只能确认小龙即将刷新和下半区风险较高，不会猜测具体机制。');
     else setAnswer('敌方打野刚在下半区出现，而你已经连续两次单独阵亡。现在继续带线的收益低于再次阵亡和丢失小龙的风险。');
     setQuestion('');
+  };
+
+  const explain = () => {
+    setAnswer(fallback === 'unavailable'
+      ? modelUnavailableMessage
+      : '敌方打野刚在下半区出现，而你已经连续两次单独阵亡。现在继续带线的收益低于再次阵亡和丢失小龙的风险。');
   };
 
   const status = scene === 'discover' ? '正在理解今晚状态' : scene === 'playing' ? '正在理解当前对局' : scene === 'post' ? '正在生成赛后复盘' : '正在匹配合适队友';
@@ -382,7 +389,11 @@ function AgentPanel({
       <div className="flex-1 overflow-y-auto p-4">
         {fallback !== 'normal' && (
           <div className="mb-3 rounded-lg border border-amber-300/15 bg-amber-300/6 px-3 py-2 text-[10px] text-amber-200">
-            {fallback === 'timeout' ? '模型超时 · Harness 已启用规则兜底' : '未检索到可靠知识 · 已限制回答范围'}
+            {fallback === 'unavailable'
+              ? '模型服务未配置 · 当前 Demo 未接入 API Key'
+              : fallback === 'timeout'
+                ? '模型超时 · Harness 已启用规则兜底'
+                : '未检索到可靠知识 · 已限制回答范围'}
           </div>
         )}
 
@@ -420,7 +431,7 @@ function AgentPanel({
               </div>
             </div>
             <div className="mt-3 grid grid-cols-3 gap-2">
-              <Button onClick={() => setAnswer('敌方打野刚在下半区出现，而你已经连续两次单独阵亡。现在继续带线的收益低于再次阵亡和丢失小龙的风险。')} variant="outline" className="border-white/8 bg-white/3 text-xs text-slate-300">为什么？</Button>
+              <Button onClick={explain} variant="outline" className="border-white/8 bg-white/3 text-xs text-slate-300">为什么？</Button>
               <Button onClick={() => setAcknowledged(true)} className="bg-cyan-300 text-xs text-slate-950 hover:bg-cyan-200">知道了</Button>
               <Button onClick={() => setQuiet(true)} variant="ghost" className="text-xs text-slate-500">{quiet ? '已减少' : '减少提醒'}</Button>
             </div>
@@ -501,9 +512,10 @@ function DebugSheet({
 
         <div className="border-b border-white/8 p-4">
           <p className="mb-2 text-[10px] font-medium tracking-widest text-slate-600">运行模式</p>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {[
-              ['normal', '模型正常'],
+              ['unavailable', '模型未接入'],
+              ['normal', '本地模拟'],
               ['timeout', '模拟超时'],
               ['no-knowledge', '知识不足'],
             ].map(([mode, label]) => (
@@ -533,8 +545,8 @@ function DebugSheet({
                 ['01', 'Scene Router', scene.toUpperCase(), '12 ms'],
                 ['02', 'Context Builder', '5 个关键事件', '18 ms'],
                 ['03', 'RAG Retrieval', '命中 KB-021', '34 ms'],
-                ['04', 'LLM Decision', fallback === 'timeout' ? 'TIMEOUT' : 'Schema valid', fallback === 'timeout' ? '2000 ms' : '820 ms'],
-                ['05', 'Harness', fallback === 'normal' ? '正常输出' : '安全降级', '7 ms'],
+                ['04', 'LLM Decision', fallback === 'unavailable' ? 'NOT_CONFIGURED' : fallback === 'timeout' ? 'TIMEOUT' : 'Schema valid', fallback === 'unavailable' ? '—' : fallback === 'timeout' ? '2000 ms' : '820 ms'],
+                ['05', 'Harness', fallback === 'normal' ? '本地模拟输出' : fallback === 'unavailable' ? '阻止伪回答' : '安全降级', '7 ms'],
               ].map(([index, name, status, time]) => <div key={index} className="trace-row"><span>{index}</span><div><strong>{name}</strong><p>{status}</p></div><time>{time}</time></div>)}
             </div>
           </div>}
@@ -548,7 +560,7 @@ export default function Home() {
   const [demoIndex, setDemoIndex] = useState(0);
   const [autoPlaying, setAutoPlaying] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
-  const [fallback, setFallback] = useState<FallbackMode>('normal');
+  const [fallback, setFallback] = useState<FallbackMode>('unavailable');
 
   const scene = demoSteps[demoIndex].scene;
   const playStage = scene === 'playing' ? Math.max(0, demoIndex - 1) : 0;
@@ -576,7 +588,7 @@ export default function Home() {
   };
 
   const next = () => setDemoIndex((current) => Math.min(current + 1, demoSteps.length - 1));
-  const reset = () => { setDemoIndex(0); setAutoPlaying(false); setFallback('normal'); };
+  const reset = () => { setDemoIndex(0); setAutoPlaying(false); setFallback('unavailable'); };
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#060a12] text-slate-100">
@@ -618,7 +630,7 @@ export default function Home() {
         {scene === 'post' && <PostGameScene onSocial={() => setDemoIndex(7)} />}
         {scene === 'social' && <SocialScene />}
 
-        <AgentPanel key={`${scene}-${playStage}`} scene={scene} playStage={playStage} fallback={fallback} />
+        <AgentPanel key={`${scene}-${playStage}-${fallback}`} scene={scene} playStage={playStage} fallback={fallback} />
       </div>
 
       <footer className="demo-footer">
