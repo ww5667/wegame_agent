@@ -1,649 +1,427 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
-  type ButtonHTMLAttributes,
-  type HTMLAttributes,
+  type FormEvent,
 } from 'react';
 import {
+  Bell,
   Bot,
-  Bug,
   Check,
   ChevronRight,
   CircleDot,
   Clock3,
   Gamepad2,
-  Headphones,
-  MessageSquareMore,
-  Mic2,
-  Pause,
-  Play,
-  RotateCcw,
+  Heart,
+  Image as ImageIcon,
+  Keyboard,
+  MessageCircle,
+  Plus,
+  MoreHorizontal,
   Search,
   Send,
   ShieldAlert,
   Sparkles,
-  Trophy,
+  Swords,
+  Target,
+  ThumbsUp,
   UserPlus,
   Users,
+  X,
 } from 'lucide-react';
 
-type Scene = 'discover' | 'playing' | 'post' | 'social';
-type FallbackMode = 'unavailable' | 'normal' | 'timeout' | 'no-knowledge';
-
-const modelUnavailableMessage = '暂未接入大模型，请稍后再试。';
-
-function Button({
-  className = '',
-  variant: _variant,
-  size = 'default',
-  ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'default' | 'outline' | 'ghost';
-  size?: 'default' | 'sm' | 'icon-sm';
-}) {
-  return <button className={`ui-button ui-button-${size} ${className}`} {...props} />;
-}
-
-function Badge({
-  className = '',
-  variant: _variant,
-  ...props
-}: HTMLAttributes<HTMLSpanElement> & { variant?: 'default' | 'outline' }) {
-  return <span className={`ui-badge ${className}`} {...props} />;
-}
-
-const demoSteps: Array<{ scene: Scene; label: string }> = [
-  { scene: 'discover', label: '理解今晚需求' },
-  { scene: 'playing', label: '进入对局' },
-  { scene: 'playing', label: '普通事件' },
-  { scene: 'playing', label: '首次阵亡' },
-  { scene: 'playing', label: '风险累积' },
-  { scene: 'playing', label: '关键资源窗口' },
-  { scene: 'post', label: 'AI 赛后复盘' },
-  { scene: 'social', label: '寻找合适队友' },
-];
-
-const sceneIndex: Record<Scene, number> = {
-  discover: 0,
-  playing: 5,
-  post: 6,
-  social: 7,
+type View = 'discover' | 'companion' | 'community';
+type CommunityTab = 'recommend' | 'following' | 'latest';
+type ChatMessage = { id: number; role: 'agent' | 'user'; text: string };
+type Post = {
+  id: number;
+  user: string;
+  time: string;
+  content: string;
+  kind: 'moment' | 'team';
+  tags?: string[];
 };
 
 const games = [
-  {
-    name: '星港协作队',
-    eyebrow: '今晚首选',
-    tags: ['多人合作', '轻松', '单局 25 分钟'],
-    reason: '符合你当前的时间和放松需求，2 位好友正在游玩。',
-    tone: 'cyan',
-  },
-  {
-    name: '霓光乱斗',
-    eyebrow: '快速开局',
-    tags: ['短局', '即时战斗', '低压力'],
-    reason: '平均 18 分钟一局，适合今晚快速来一把。',
-    tone: 'violet',
-  },
-  {
-    name: '远境建造局',
-    eyebrow: '换换心情',
-    tags: ['沙盒', '建造', '好友联机'],
-    reason: '和最近的排位体验差异更大，节奏最轻松。',
-    tone: 'amber',
-  },
+  { name: '雾海航线', cover: 'covers/mist-route.webp', reason: '在浓雾航道中探索未知岛链，适合放松体验。', match: 92 },
+  { name: '浮岛工坊', cover: 'covers/floating-workshop.webp', reason: '建造与自动化并重，随时可停，节奏舒缓。', match: 88 },
+  { name: '热血街场', cover: 'covers/street-arena.webp', reason: '组建你的街头队伍，每局时间短，反馈直接。', match: 85 },
 ];
 
 const teammates = [
-  {
-    name: 'Cloud7',
-    role: '打野',
-    score: 92,
-    tags: ['团队', '休闲', '开麦'],
-    active: '20:00—23:00',
-    reason: '偏好围绕下路和地图资源组织团队行动。',
-  },
-  {
-    name: 'Mori',
-    role: '辅助',
-    score: 87,
-    tags: ['稳健', '不压力', '可开麦'],
-    active: '19:30—22:30',
-    reason: '沟通节奏与你接近，最近也在寻找固定队友。',
-  },
+  { name: 'Cloud7', role: '打野', score: 92, tags: ['团队', '可开麦'], active: '20:00—23:00', reason: '习惯围绕团队资源行动，沟通直接但不施压。' },
+  { name: 'Mori', role: '辅助', score: 87, tags: ['稳健', '不压力'], active: '19:30—22:30', reason: '活跃时间与你重合，偏好轻松配合和连续组队。' },
 ];
 
-function ProductLogo() {
-  return (
-    <div className="agent-logo" aria-hidden="true">
-      <Sparkles className="size-4" />
-    </div>
-  );
+const initialPosts: Post[] = [
+  { id: 1, user: 'Mori', time: '2 小时前', content: '第一次三人协作通关，最后十秒真的太惊险了。', kind: 'moment' },
+  { id: 2, user: 'Cloud7', time: '30 分钟前', content: '今晚 20:30 轻松开两局，想找愿意沟通但不压力的队友。', kind: 'team', tags: ['缺 1 人', '可开麦', '不压力'] },
+];
+
+function Brand() {
+  return <button className="brand" type="button" aria-label="返回主页"><span className="brand-mark">W</span><span>WeGame</span></button>;
 }
 
-function DiscoveryScene({ onStart }: { onStart: () => void }) {
-  return (
-    <section className="scene-scroll p-5 lg:p-7">
-      <div className="mx-auto max-w-5xl">
-        <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-[-0.04em]">今晚想玩点什么？</h1>
-            <p className="mt-2 text-sm text-slate-500">Agent 已结合你的时间、疲劳度和在线好友完成筛选。</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {['只有 40 分钟', '想轻松一点', '和朋友玩'].map((item) => (
-              <button key={item} className="filter-chip"><Check className="size-3" />{item}</button>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid gap-4 xl:grid-cols-3">
-          {games.map((game, index) => (
-            <article key={game.name} className={`game-card game-card-${game.tone}`}>
-              <div className="game-art">
-                <div className="game-orbit game-orbit-a" />
-                <div className="game-orbit game-orbit-b" />
-                <div className="game-core"><Gamepad2 className="size-5" /></div>
-                <span>{game.eyebrow}</span>
-              </div>
-              <div className="p-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-base font-semibold">{game.name}</h2>
-                  {index === 0 && <Badge className="bg-cyan-300 text-[10px] text-slate-950">92% 匹配</Badge>}
-                </div>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {game.tags.map((tag) => <Badge key={tag} variant="outline" className="border-white/8 bg-white/3 text-[10px] font-normal text-slate-400">{tag}</Badge>)}
-                </div>
-                <p className="mt-4 min-h-10 text-xs leading-5 text-slate-500">{game.reason}</p>
-                <Button onClick={onStart} className={`mt-4 w-full ${index === 0 ? 'bg-cyan-300 text-slate-950 hover:bg-cyan-200' : 'border-white/8 bg-white/4 text-slate-300'}`} variant={index === 0 ? 'default' : 'outline'}>
-                  {index === 0 ? '开始演示对局' : '查看详情'} <ChevronRight />
-                </Button>
-              </div>
-            </article>
-          ))}
-        </div>
-
-        <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          {[
-            ['40 分钟', '本次可用时间', Clock3],
-            ['2 位', '好友当前在线', Users],
-            ['轻松合作', '当前游戏意图', Headphones],
-          ].map(([value, label, Icon]) => {
-            const IconComponent = Icon as typeof Clock3;
-            return (
-              <div key={String(label)} className="context-stat">
-                <IconComponent className="size-4 text-cyan-300" />
-                <strong>{String(value)}</strong>
-                <span>{String(label)}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function TacticalMap({ stage }: { stage: number }) {
-  const state = [
-    { time: '00:10', score: '0 : 0', economy: '0', objective: '05:00' },
-    { time: '10:30', score: '7 : 8', economy: '-400', objective: '02:45' },
-    { time: '11:20', score: '7 : 9', economy: '-900', objective: '01:55' },
-    { time: '12:05', score: '8 : 11', economy: '-1,450', objective: '01:10' },
-    { time: '12:30', score: '8 : 12', economy: '-1,800', objective: '00:45' },
-  ][Math.min(stage, 4)];
-
-  const events = [
-    '对局数据接入完成',
-    '10:30 下路完成一次正常换血',
-    '11:20 玩家在下路单独阵亡',
-    '12:05 玩家在河道附近再次阵亡',
-    '12:15 敌方打野出现在下半区',
-  ].slice(0, Math.max(1, stage + 1)).reverse().slice(0, 3);
-
-  return (
-    <section className="min-w-0 bg-[#070b13] p-3 lg:p-4">
-      <div className="mb-3 grid grid-cols-4 gap-2">
-        {[
-          ['时间', state.time],
-          ['比分', state.score],
-          ['经济差', state.economy],
-          ['小龙刷新', state.objective],
-        ].map(([label, value], index) => (
-          <div key={label} className="stat-card">
-            <span>{label}</span>
-            <strong className={stage >= 3 && index > 1 ? 'text-amber-300' : ''}>{value}</strong>
-          </div>
-        ))}
-      </div>
-
-      <div className="tactical-map">
-        <div className="map-glow map-glow-a" />
-        <div className="map-glow map-glow-b" />
-        <div className="lane lane-a" />
-        <div className="lane lane-b" />
-        <div className="lane lane-c" />
-        <div className="map-label left-[7%] top-[8%]">上路</div>
-        <div className="map-label right-[7%] bottom-[8%]">下路</div>
-        <div className="objective-ring left-[45%] top-[40%]">
-          <span className="text-[9px] text-slate-500">OBJECTIVE</span>
-          <strong>{state.objective}</strong>
-          <span className="text-[11px] text-cyan-200">小龙</span>
-        </div>
-        <div className="team-dot left-[24%] top-[60%]" />
-        <div className="team-dot left-[34%] top-[54%]" />
-        <div className="team-dot left-[39%] top-[68%]" />
-        <div className="enemy-dot right-[24%] top-[55%]" />
-        <div className="enemy-dot right-[34%] top-[38%]" />
-        {stage >= 2 && <div className="risk-ping right-[18%] bottom-[20%]"><ShieldAlert className="size-4" /></div>}
-        <Badge className={`absolute left-4 top-4 border ${stage >= 4 ? 'border-amber-400/25 bg-amber-400/10 text-amber-200' : 'border-cyan-400/20 bg-cyan-400/8 text-cyan-200'}`}>
-          <span className={`mr-1 size-1.5 animate-pulse rounded-full ${stage >= 4 ? 'bg-amber-300' : 'bg-cyan-300'}`} />
-          {stage >= 4 ? '风险上升' : '状态稳定'}
-        </Badge>
-        <div className="absolute bottom-4 left-4 z-10 w-[min(340px,calc(100%-32px))] rounded-xl border border-white/8 bg-[#080d17]/90 p-3 backdrop-blur-xl">
-          <div className="mb-2 flex items-center justify-between text-[11px]">
-            <span className="font-medium text-slate-300">最近事件</span>
-            <span className="text-slate-600">LIVE CONTEXT</span>
-          </div>
-          <div className="space-y-2 text-[11px] text-slate-400">
-            {events.map((event, index) => <p key={event}><span className="mr-2 font-mono text-cyan-400/70">0{index + 1}</span>{event}</p>)}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function PostGameScene({ onSocial }: { onSocial: () => void }) {
-  return (
-    <section className="scene-scroll p-5 lg:p-7">
-      <div className="mx-auto max-w-5xl">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <Badge className="mb-3 border border-violet-300/20 bg-violet-300/8 text-violet-200">赛后复盘 · POST GAME</Badge>
-            <h1 className="text-3xl font-semibold tracking-[-0.04em]">这局 Agent 看到了什么</h1>
-            <p className="mt-2 text-sm text-slate-500">26:18 · 失败 · 示例 MOBA 排位</p>
-          </div>
-          <div className="score-ring"><span>本局成长</span><strong>+12</strong></div>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-[1.2fr_.8fr]">
-          <article className="review-card">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-cyan-300/10 text-cyan-300"><Trophy className="size-5" /></div>
-              <div><p className="text-xs text-slate-500">做得不错</p><h2 className="font-semibold">中期调整速度很快</h2></div>
-            </div>
-            <div className="mt-5 space-y-4">
-              <div className="review-row"><Check className="size-4 text-emerald-300" /><div><strong>两次资源团均提前到场</strong><p>接受建议后，你没有继续单带。</p></div></div>
-              <div className="review-row"><Check className="size-4 text-emerald-300" /><div><strong>视野参与率提升 18%</strong><p>和打野共同完成了下半区视野控制。</p></div></div>
-            </div>
-          </article>
-
-          <article className="review-card border-amber-300/12">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-amber-300/10 text-amber-300"><ShieldAlert className="size-5" /></div>
-              <div><p className="text-xs text-slate-500">下一局重点</p><h2 className="font-semibold">提前关注资源窗口</h2></div>
-            </div>
-            <p className="mt-5 text-sm leading-6 text-slate-400">前 12 分钟有两次无视野深入。下一局从资源刷新前 70 秒开始看地图。</p>
-            <div className="mt-5 rounded-lg bg-white/3 p-3 text-xs text-cyan-200">一个目标：别等开团后再集合</div>
-          </article>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/8 bg-white/[0.025] p-5">
-          <div><p className="text-sm font-medium">想继续玩一局？</p><p className="mt-1 text-xs text-slate-500">Agent 可以帮你找一位更适合当前节奏的队友。</p></div>
-          <Button onClick={onSocial} className="bg-cyan-300 text-slate-950 hover:bg-cyan-200"><Users />寻找合适队友</Button>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function SocialScene() {
-  const [invited, setInvited] = useState<string | null>(null);
-  return (
-    <section className="scene-scroll p-5 lg:p-7">
-      <div className="mx-auto max-w-5xl">
-        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-[-0.04em]">找到更合拍的队友</h1>
-            <p className="mt-2 text-sm text-slate-500">基于位置、沟通习惯、活跃时间和本局节奏进行匹配。</p>
-          </div>
-          <div className="flex gap-2 text-xs text-slate-400"><Badge variant="outline" className="border-white/8">需要：打野 / 辅助</Badge><Badge variant="outline" className="border-white/8">休闲开麦</Badge></div>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          {teammates.map((mate) => (
-            <article key={mate.name} className="teammate-card">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="avatar-orb">{mate.name.slice(0, 1)}</div>
-                  <div><h2 className="font-semibold">{mate.name}</h2><p className="mt-1 text-xs text-slate-500">常玩位置：{mate.role}</p></div>
-                </div>
-                <div className="text-right"><strong className="text-xl text-cyan-200">{mate.score}%</strong><p className="text-[10px] text-slate-600">匹配度</p></div>
-              </div>
-              <div className="my-4 flex flex-wrap gap-2">{mate.tags.map((tag) => <Badge key={tag} variant="outline" className="border-white/8 bg-white/3 text-[10px] text-slate-400">{tag}</Badge>)}</div>
-              <div className="space-y-2 rounded-xl bg-white/[0.025] p-3 text-xs text-slate-400">
-                <p className="flex items-center gap-2"><Clock3 className="size-3.5 text-slate-600" />活跃时间：{mate.active}</p>
-                <p className="flex items-start gap-2"><Sparkles className="mt-0.5 size-3.5 shrink-0 text-cyan-300" />{mate.reason}</p>
-              </div>
-              <Button onClick={() => setInvited(mate.name)} className={`mt-4 w-full ${invited === mate.name ? 'bg-emerald-300 text-emerald-950' : 'bg-cyan-300 text-slate-950 hover:bg-cyan-200'}`}>
-                {invited === mate.name ? <><Check />邀请已发送</> : <><UserPlus />邀请组队</>}
-              </Button>
-            </article>
-          ))}
-        </div>
-
-        {invited && (
-          <div className="mt-4 rounded-2xl border border-emerald-300/15 bg-emerald-300/[0.035] p-4">
-            <p className="text-xs text-emerald-200">Agent 已生成并发送邀请</p>
-            <p className="mt-2 text-sm text-slate-300">“刚才打了一局，想找个偏团队配合的队友。我主玩 ADC，节奏比较休闲，要一起排一局吗？”</p>
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function AgentPanel({
-  scene,
-  playStage,
-  fallback,
-}: {
-  scene: Scene;
-  playStage: number;
-  fallback: FallbackMode;
+function Header({ view, onNavigate, agentOpen, onToggleAgent, onUnavailable }: {
+  view: View;
+  onNavigate: (view: View) => void;
+  agentOpen: boolean;
+  onToggleAgent: () => void;
+  onUnavailable: () => void;
 }) {
-  const [question, setQuestion] = useState('');
-  const [answer, setAnswer] = useState<string | null>(null);
-  const [acknowledged, setAcknowledged] = useState(false);
-  const [quiet, setQuiet] = useState(false);
-
-  const ask = () => {
-    if (!question.trim()) return;
-    if (fallback === 'unavailable') setAnswer(modelUnavailableMessage);
-    else if (fallback === 'timeout') setAnswer('模型响应超时。已使用规则模板：先保证生存，再围绕下一地图资源行动。');
-    else if (fallback === 'no-knowledge') setAnswer('当前知识不足，我只能确认小龙即将刷新和下半区风险较高，不会猜测具体机制。');
-    else setAnswer('敌方打野刚在下半区出现，而你已经连续两次单独阵亡。现在继续带线的收益低于再次阵亡和丢失小龙的风险。');
-    setQuestion('');
+  const [searchText, setSearchText] = useState('');
+  const submitSearch = (event: FormEvent) => {
+    event.preventDefault();
+    if (searchText.trim()) onUnavailable();
   };
-
-  const explain = () => {
-    setAnswer(fallback === 'unavailable'
-      ? modelUnavailableMessage
-      : '敌方打野刚在下半区出现，而你已经连续两次单独阵亡。现在继续带线的收益低于再次阵亡和丢失小龙的风险。');
-  };
-
-  const status = scene === 'discover' ? '正在理解今晚状态' : scene === 'playing' ? '正在理解当前对局' : scene === 'post' ? '正在生成赛后复盘' : '正在匹配合适队友';
-
   return (
-    <aside className="agent-panel">
-      <div className="flex items-center justify-between border-b border-white/8 px-5 py-4">
-        <div className="flex items-center gap-3">
-          <div className="flex size-9 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-300"><Bot className="size-4" /></div>
-          <div><h1 className="text-sm font-semibold">Agent</h1><p className="mt-0.5 text-[10px] text-cyan-300/65">{status}</p></div>
-        </div>
-        <span className="size-2 animate-pulse rounded-full bg-cyan-300 shadow-[0_0_10px_#67e8f9]" />
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4">
-        {fallback !== 'normal' && (
-          <div className="mb-3 rounded-lg border border-amber-300/15 bg-amber-300/6 px-3 py-2 text-[10px] text-amber-200">
-            {fallback === 'unavailable'
-              ? '模型服务未配置 · 当前 Demo 未接入 API Key'
-              : fallback === 'timeout'
-                ? '模型超时 · Harness 已启用规则兜底'
-                : '未检索到可靠知识 · 已限制回答范围'}
-          </div>
-        )}
-
-        {scene === 'discover' && (
-          <div className="agent-content-card">
-            <p className="agent-kicker"><Search className="size-3.5" /> 已完成需求理解</p>
-            <h2 className="text-lg font-semibold">今晚更适合轻松合作</h2>
-            <p className="mt-2 text-xs leading-6 text-slate-400">你只有 40 分钟，而且最近连续进行了 3 局排位。我优先筛选了短局、多人合作和低压力游戏。</p>
-            <div className="mt-4 space-y-2">{['40 分钟空闲', '最近排位疲劳度较高', '2 位好友在线'].map((item) => <div key={item} className="evidence-row"><Check className="size-3.5" />{item}</div>)}</div>
-          </div>
-        )}
-
-        {scene === 'playing' && playStage < 4 && (
-          <div className="agent-content-card">
-            <p className="agent-kicker"><CircleDot className="size-3.5" /> 实时感知中</p>
-            <h2 className="text-lg font-semibold">{playStage < 2 ? '当前无需打扰' : playStage === 2 ? '记录到一次风险事件' : '风险正在累积'}</h2>
-            <p className="mt-2 text-xs leading-6 text-slate-400">{playStage < 2 ? '对局状态稳定，Agent 只更新上下文，不弹出建议。' : playStage === 2 ? '一次无视野阵亡不足以触发主动提醒，我会继续观察下一资源窗口。' : '连续失误已达到触发阈值，等待即将到来的地图目标给出行动建议。'}</p>
-            <div className="mt-5 flex items-center gap-2 text-[10px] text-slate-600"><span className="size-1.5 rounded-full bg-cyan-300" />HARNESS · 提醒抑制生效</div>
-          </div>
-        )}
-
-        {scene === 'playing' && playStage >= 4 && !acknowledged && (
-          <>
-            <div className="advice-card">
-              <p className="agent-kicker text-amber-300"><ShieldAlert className="size-3.5" /> 高优先级建议</p>
-              <h2 className="text-lg font-semibold tracking-tight">先回城，再和队友集合</h2>
-              <p className="mt-2 text-xs leading-6 text-slate-400">别继续单带。回城补给后，和打野一起布置小龙区域视野。</p>
-              <div className="my-4 grid grid-cols-3 gap-2">
-                {['回城补给', '布置视野', '跟随队友'].map((step, index) => <div key={step} className="action-step"><span>0{index + 1}</span><p>{step}</p></div>)}
-              </div>
-              <div className="border-t border-white/8 pt-4">
-                <p className="mb-2 text-[10px] font-medium tracking-wider text-slate-500">判断依据</p>
-                <div className="flex flex-wrap gap-2">{['连续阵亡 2 次', '经济落后 1800', '小龙 45 秒'].map((item) => <Badge key={item} variant="outline" className="border-white/8 bg-white/3 text-[10px] font-normal text-slate-400">{item}</Badge>)}</div>
-                <p className="mt-3 text-[10px] text-cyan-400/60">知识依据 · KB-021</p>
-              </div>
-            </div>
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              <Button onClick={explain} variant="outline" className="border-white/8 bg-white/3 text-xs text-slate-300">为什么？</Button>
-              <Button onClick={() => setAcknowledged(true)} className="bg-cyan-300 text-xs text-slate-950 hover:bg-cyan-200">知道了</Button>
-              <Button onClick={() => setQuiet(true)} variant="ghost" className="text-xs text-slate-500">{quiet ? '已减少' : '减少提醒'}</Button>
-            </div>
-          </>
-        )}
-
-        {scene === 'playing' && playStage >= 4 && acknowledged && (
-          <div className="agent-content-card text-center"><div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-full bg-emerald-300/10 text-emerald-300"><Check className="size-5" /></div><h2 className="font-semibold">建议已记下</h2><p className="mt-2 text-xs text-slate-500">我会继续观察集合状态，不重复打扰。</p></div>
-        )}
-
-        {scene === 'post' && (
-          <div className="agent-content-card">
-            <p className="agent-kicker"><Trophy className="size-3.5" /> 本局总结</p>
-            <h2 className="text-lg font-semibold">调整有效，时机还可提前</h2>
-            <p className="mt-2 text-xs leading-6 text-slate-400">你接受建议后的两次资源团都提前到场。下一局只需更早识别资源窗口。</p>
-            <div className="mt-4 rounded-lg bg-cyan-300/5 p-3 text-xs text-cyan-200">下一局目标：资源刷新前 70 秒开始看地图</div>
-          </div>
-        )}
-
-        {scene === 'social' && (
-          <div className="agent-content-card">
-            <p className="agent-kicker"><Users className="size-3.5" /> 队友匹配完成</p>
-            <h2 className="text-lg font-semibold">优先找团队型打野</h2>
-            <p className="mt-2 text-xs leading-6 text-slate-400">你的 ADC 风格偏稳健，更适合愿意围绕下路资源组织行动、沟通压力较低的队友。</p>
-            <div className="mt-4 flex gap-2"><Badge variant="outline" className="border-white/8 text-slate-400"><Mic2 />可开麦</Badge><Badge variant="outline" className="border-white/8 text-slate-400">休闲</Badge></div>
-          </div>
-        )}
-
-        {answer && <div className="mt-4 rounded-xl border border-cyan-300/12 bg-cyan-300/[0.035] p-3 text-xs leading-5 text-slate-300"><p className="mb-1 text-[10px] text-cyan-300">Agent 回答</p>{answer}</div>}
-      </div>
-
-      <form onSubmit={(event) => { event.preventDefault(); ask(); }} className="border-t border-white/8 p-4">
-        <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/4 p-1.5 pl-3">
-          <MessageSquareMore className="size-4 shrink-0 text-slate-500" />
-          <input value={question} onChange={(event) => setQuestion(event.target.value)} className="h-7 min-w-0 flex-1 border-0 bg-transparent px-0 text-xs text-slate-200 outline-none placeholder:text-slate-600" placeholder="问问 Agent…" aria-label="向 Agent 提问" />
-          <Button type="submit" size="icon-sm" className="bg-cyan-300 text-slate-950"><Send /></Button>
-        </div>
+    <header className="app-header">
+      <Brand />
+      <nav className="top-nav" aria-label="主导航">
+        <button className={view !== 'community' ? 'active' : ''} onClick={() => onNavigate('discover')} type="button">主页</button>
+        <button className={view === 'community' ? 'active' : ''} onClick={() => onNavigate('community')} type="button">社区</button>
+        <button onClick={onUnavailable} type="button">商店</button>
+        <button onClick={onUnavailable} type="button">测试区</button>
+        <button onClick={onUnavailable} type="button">直播</button>
+      </nav>
+      <form className="global-search" onSubmit={submitSearch}>
+        <Search aria-hidden="true" />
+        <input value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="搜索游戏、社区、内容" aria-label="全局搜索" />
       </form>
+      <div className="header-actions">
+        <button className="icon-button desktop-only" onClick={onUnavailable} type="button" aria-label="通知"><Bell /></button>
+        <button className={`shortcut-button ${agentOpen ? 'is-active' : ''}`} onClick={onToggleAgent} type="button" aria-label={agentOpen ? '收起 AI 游戏助手' : '打开 AI 游戏助手'}>
+          <Bot /><span className="desktop-only">AI 助手</span><kbd>Ctrl Space</kbd>
+        </button>
+        <button className="profile-button" type="button" aria-label="NightFox 的个人中心">N</button>
+      </div>
+    </header>
+  );
+}
+
+function GameCover({ src }: { src: string }) {
+  return <span className="game-cover" aria-hidden="true"><img src={`${import.meta.env.BASE_URL}${src}`} alt="" loading="lazy" /></span>;
+}
+
+function Sidebar({ view, onNavigate }: { view: View; onNavigate: (view: View) => void }) {
+  if (view === 'community') {
+    return (
+      <aside className="sidebar community-sidebar">
+        <h2>社区</h2>
+        <nav className="side-navigation" aria-label="社区导航">
+          <button className="active" type="button"><Sparkles />推荐</button>
+          <button type="button"><Heart />关注</button>
+          <button type="button"><UserPlus />找队友</button>
+        </nav>
+        <div className="side-divider" />
+        <p className="side-label">我的圈子</p>
+        <div className="circle-list">
+          {[
+            ['星港协作队', 'starport-keyart.png'],
+            ['浮岛工坊', 'covers/floating-workshop.webp'],
+            ['热血街场', 'covers/street-arena.webp'],
+          ].map(([name, cover]) => <button key={name} type="button"><GameCover src={cover} /><span>{name}</span></button>)}
+        </div>
+        <button className="sidebar-bottom-action" type="button"><Gamepad2 />圈子管理<ChevronRight /></button>
+      </aside>
+    );
+  }
+  return (
+    <aside className="sidebar library-sidebar">
+      <h2>我的游戏</h2>
+      <nav className="side-navigation primary-entry" aria-label="游戏助手入口">
+        <button className={view === 'discover' ? 'active' : ''} onClick={() => onNavigate('discover')} type="button"><Sparkles />AI 游戏助手</button>
+        <button className={view === 'companion' ? 'active' : ''} onClick={() => onNavigate('companion')} type="button"><Target />对局助手{view === 'companion' && <span className="live-dot" />}</button>
+      </nav>
+      <p className="side-label">最近游玩</p>
+      <div className="recent-games">
+        {[
+          ['雾海航线', '1 小时前', 'covers/mist-route.webp'],
+          ['浮岛工坊', '昨天', 'covers/floating-workshop.webp'],
+          ['热血街场', view === 'companion' ? '游戏中' : '3 天前', 'covers/street-arena.webp'],
+          ['风语之森', '5 天前', 'covers/whisper-forest.webp'],
+          ['机动链路', '7 天前', 'covers/mobile-link.webp'],
+        ].map(([name, time, cover]) => {
+          return (
+            <button key={String(name)} className={name === '热血街场' && view === 'companion' ? 'playing' : ''} type="button">
+              <GameCover src={String(cover)} /><span><strong>{String(name)}</strong><small>{String(time)}</small></span>
+            </button>
+          );
+        })}
+      </div>
+      <button className="sidebar-bottom-action" type="button"><Gamepad2 />游戏管理<ChevronRight /></button>
     </aside>
   );
 }
 
-function DebugSheet({
-  open,
-  onOpenChange,
-  scene,
-  fallback,
-  onFallbackChange,
-  playStage,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  scene: Scene;
-  fallback: FallbackMode;
-  onFallbackChange: (mode: FallbackMode) => void;
-  playStage: number;
-}) {
-  const [tab, setTab] = useState<'context' | 'prompt' | 'knowledge' | 'trace'>('context');
-  const contextJson = JSON.stringify({
-    scene,
-    player: { role: 'ADC', style: ['稳健', '团队'], availableMinutes: 40 },
-    match: scene === 'playing' ? { gameTime: '12:30', economy: -1800, recentDeaths: playStage >= 3 ? 2 : playStage >= 2 ? 1 : 0, nextObjective: 'dragon', respawnSeconds: 45 } : null,
-  }, null, 2);
-
-  if (!open) return null;
-
+function DiscoverPage({ onStart, onAskWhy }: { onStart: () => void; onAskWhy: () => void }) {
   return (
-    <div className="debug-overlay">
-      <button type="button" className="debug-backdrop" aria-label="关闭 AI 调试台" onClick={() => onOpenChange(false)} />
-      <dialog open className="debug-drawer" aria-labelledby="debug-title">
-        <header className="flex items-start justify-between border-b border-white/8 p-5">
-          <div>
-            <div className="flex items-center gap-2 text-cyan-300"><Bug className="size-4" /><h2 id="debug-title" className="text-sm font-semibold text-slate-100">AI 调试台</h2></div>
-            <p className="mt-1 text-xs text-slate-500">查看 Context、Prompt、RAG、工具调用与 Harness 状态</p>
-          </div>
-          <Button onClick={() => onOpenChange(false)} size="icon-sm" variant="ghost" aria-label="关闭 AI 调试台" className="text-slate-500">×</Button>
-        </header>
-
-        <div className="border-b border-white/8 p-4">
-          <p className="mb-2 text-[10px] font-medium tracking-widest text-slate-600">运行模式</p>
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              ['unavailable', '模型未接入'],
-              ['normal', '本地模拟'],
-              ['timeout', '模拟超时'],
-              ['no-knowledge', '知识不足'],
-            ].map(([mode, label]) => (
-              <Button key={mode} onClick={() => onFallbackChange(mode as FallbackMode)} size="sm" variant="outline" className={fallback === mode ? 'border-cyan-300/30 bg-cyan-300/10 text-cyan-200' : 'border-white/8 bg-white/3 text-slate-500'}>{label}</Button>
-            ))}
-          </div>
+    <section className="workspace discover-page">
+      <div className="page-heading"><div><h1>晚上好，今晚玩什么？</h1><p><Clock3 />约 40 分钟 <span>·</span> 想轻松一点 <span>·</span> <Users />2 位好友在线</p></div></div>
+      <article className="recommendation-hero">
+        <div className="hero-copy">
+          <span className="hero-kicker"><Sparkles />Agent 今晚首选</span>
+          <h2>星港协作队</h2>
+          <div className="tag-row"><span className="tag tag-accent">多人合作</span><span className="tag">单局约 25 分钟</span></div>
+          <p>2 位好友正在游玩，节奏轻松，适合今晚快速开一局。</p>
+          <div className="hero-actions"><button className="primary-button large" onClick={onStart} type="button"><Gamepad2 />开始游戏</button><button className="text-button" onClick={onAskWhy} type="button">为什么推荐<ChevronRight /></button></div>
         </div>
+      </article>
+      <div className="section-heading"><h2>为你推荐</h2><button type="button">查看全部<ChevronRight /></button></div>
+      <ul className="recommendation-list">
+        {games.map((game) => (
+          <li key={game.name}>
+            <GameCover src={game.cover} />
+            <div className="recommendation-copy"><h3>{game.name}</h3><p>{game.reason}</p><span className="match-score"><ThumbsUp />{game.match}% <small>匹配</small></span></div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
-        <div className="min-h-0 flex-1 overflow-auto p-4">
-          <div className="flex gap-1 overflow-x-auto border-b border-white/8 pb-2" role="tablist" aria-label="调试信息分类">
-            {[
-              ['context', '上下文'],
-              ['prompt', 'Prompt'],
-              ['knowledge', '知识检索'],
-              ['trace', '运行链路'],
-            ].map(([value, label]) => <button key={value} onClick={() => setTab(value as typeof tab)} role="tab" aria-selected={tab === value} className={`debug-tab ${tab === value ? 'debug-tab-active' : ''}`}>{label}</button>)}
-          </div>
-          {tab === 'context' && <div className="mt-4"><pre className="debug-code">{contextJson}</pre></div>}
-          {tab === 'prompt' && <div className="mt-4"><pre className="debug-code">{`SYSTEM · play-v3\n你是 WeGame Agent。必须基于提供的实时状态回答；不得编造游戏数据。\n\nPOLICY\n1. 生存与直接危险\n2. 即将刷新的地图目标\n3. 团队协同\n4. 发育与装备\n\nOUTPUT\n返回结构化 JSON；对局建议不超过 60 个汉字。`}</pre></div>}
-          {tab === 'knowledge' && <div className="mt-4 space-y-3">
-            <div className="debug-card"><div className="flex justify-between"><strong>KB-021</strong><span className="text-cyan-300">0.91</span></div><p>经济落后且资源将在 60 秒内刷新时，优先补给、布置视野并避免单人深入。</p><span>版本 Demo Patch 1.0 · official_strategy</span></div>
-            <div className="debug-card opacity-60"><div className="flex justify-between"><strong>KB-014</strong><span>0.72</span></div><p>连续两次无视野阵亡应提高下半区风险权重。</p><span>版本 Demo Patch 1.0</span></div>
-          </div>}
-          {tab === 'trace' && <div className="mt-4">
-            <div className="trace-list">
-              {[
-                ['01', 'Scene Router', scene.toUpperCase(), '12 ms'],
-                ['02', 'Context Builder', '5 个关键事件', '18 ms'],
-                ['03', 'RAG Retrieval', '命中 KB-021', '34 ms'],
-                ['04', 'LLM Decision', fallback === 'unavailable' ? 'NOT_CONFIGURED' : fallback === 'timeout' ? 'TIMEOUT' : 'Schema valid', fallback === 'unavailable' ? '—' : fallback === 'timeout' ? '2000 ms' : '820 ms'],
-                ['05', 'Harness', fallback === 'normal' ? '本地模拟输出' : fallback === 'unavailable' ? '阻止伪回答' : '安全降级', '7 ms'],
-              ].map(([index, name, status, time]) => <div key={index} className="trace-row"><span>{index}</span><div><strong>{name}</strong><p>{status}</p></div><time>{time}</time></div>)}
-            </div>
-          </div>}
-        </div>
-      </dialog>
+function TacticalBoard() {
+  return (
+    <div className="match-card">
+      <div className="tactical-board" aria-label="虚构竞技游戏的实时战术地图">
+        <span className="lane lane-one" /><span className="lane lane-two" /><span className="lane lane-three" />
+        <span className="map-zone zone-a" /><span className="map-zone zone-b" />
+        <span className="map-marker ally ally-a" /><span className="map-marker ally ally-b" /><span className="map-marker ally ally-c" />
+        <span className="map-marker enemy enemy-a" /><span className="map-marker enemy enemy-b" /><span className="map-marker enemy enemy-c" />
+        <span className="risk-label"><ShieldAlert />风险上升</span>
+        <div className="objective-timer"><Target /><strong>00:45</strong><span>核心资源</span></div>
+      </div>
+      <ol className="event-list">
+        <li><time>11:20</time><span className="event-icon danger" /><p>下路单独阵亡</p><ChevronRight /></li>
+        <li><time>12:05</time><span className="event-icon danger" /><p>河道附近再次阵亡</p><ChevronRight /></li>
+        <li><time>12:15</time><span className="event-icon watch" /><p>敌方打野进入下半区</p><ChevronRight /></li>
+      </ol>
     </div>
   );
 }
 
-export default function Home() {
-  const [demoIndex, setDemoIndex] = useState(0);
-  const [autoPlaying, setAutoPlaying] = useState(false);
-  const [debugOpen, setDebugOpen] = useState(false);
-  const [fallback, setFallback] = useState<FallbackMode>('unavailable');
+function CompanionPage({ onOpenAgent }: { onOpenAgent: () => void }) {
+  const stats = [['时间', '12:30', Clock3], ['比分', '8 : 12', Swords], ['经济差', '-1,800', ShieldAlert], ['核心资源', '00:45', Target]];
+  return (
+    <section className="workspace companion-page">
+      <div className="page-heading companion-heading"><div><h1>对局助手</h1><p>热血街场 <span>·</span> 排位赛 <span>·</span> 12:30</p></div><button className="hotkey-hint" onClick={onOpenAgent} type="button"><Keyboard />按 <kbd>Ctrl Space</kbd> 快捷呼出助手</button></div>
+      <div className="match-stats">
+        {stats.map(([label, value, icon]) => {
+          const Icon = icon as typeof Clock3;
+          return <div key={String(label)}><span><Icon />{String(label)}</span><strong>{String(value)}</strong></div>;
+        })}
+      </div>
+      <TacticalBoard />
+      <div className="trend-section"><h2>本局趋势</h2><div className="trend-card"><div><span>视野参与</span><strong>62%</strong></div><div><span>资源到场率</span><strong>78%</strong></div><div><span>单独行动</span><strong>3 <small>次</small></strong></div></div></div>
+    </section>
+  );
+}
 
-  const scene = demoSteps[demoIndex].scene;
-  const playStage = scene === 'playing' ? Math.max(0, demoIndex - 1) : 0;
-  const progress = (demoIndex / (demoSteps.length - 1)) * 100;
+function CommunityPage({ tab, onTabChange, posts, postText, onPostTextChange, onPublish }: {
+  tab: CommunityTab;
+  onTabChange: (tab: CommunityTab) => void;
+  posts: Post[];
+  postText: string;
+  onPostTextChange: (value: string) => void;
+  onPublish: () => void;
+}) {
+  const shownPosts = tab === 'following' ? posts.filter((post) => post.user === 'Mori') : posts;
+  return (
+    <section className="workspace community-page">
+      <div className="community-title"><h1>社区</h1></div>
+      <div className="community-tabs" role="tablist" aria-label="社区动态分类">
+        {[['recommend', '推荐'], ['following', '关注'], ['latest', '最新']].map(([value, label]) => <button key={value} className={tab === value ? 'active' : ''} onClick={() => onTabChange(value as CommunityTab)} type="button" role="tab" aria-selected={tab === value}>{label}</button>)}
+      </div>
+      <div className="post-composer">
+        <div className="avatar avatar-user">N</div>
+        <textarea value={postText} onChange={(event) => onPostTextChange(event.target.value)} placeholder="分享你的游戏时刻或寻找队友…" aria-label="帖子内容" rows={2} />
+        <div className="composer-actions"><div><button type="button"><ImageIcon />图片</button><button type="button"><MessageCircle />话题</button><button type="button"><Users />组队</button></div><button className="primary-button" onClick={onPublish} type="button">发布</button></div>
+      </div>
+      <div className="feed-list">
+        {shownPosts.map((post) => (
+          <article key={post.id} className="feed-card">
+            <header><div className={`avatar ${post.user === 'Mori' ? 'avatar-mori' : 'avatar-cloud'}`}>{post.user.slice(0, 1)}</div><div><h2>{post.user}{post.kind === 'team' && <span className="post-type">寻找队友</span>}</h2><p>{post.time}{post.kind === 'moment' && ' · 星港协作队'}</p></div><button type="button" aria-label="更多操作"><MoreHorizontal /></button></header>
+            <p className="post-copy">{post.content}</p>
+            {post.kind === 'moment' && <img className="post-image" src={`${import.meta.env.BASE_URL}starport-keyart.png`} alt="星港协作队的虚构游戏截图" />}
+            {post.tags && <div className="tag-row post-tags">{post.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</div>}
+            <footer>{post.kind === 'moment' ? <><button type="button"><ThumbsUp />赞 128</button><button type="button"><MessageCircle />评论 24</button><button type="button"><Send />分享</button></> : <button className="outline-button join-button" type="button">申请加入</button>}</footer>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
 
-  useEffect(() => {
-    if (!autoPlaying) return;
-    const timer = window.setInterval(() => {
-      setDemoIndex((current) => {
-        if (current >= demoSteps.length - 1) {
-          setAutoPlaying(false);
-          return current;
-        }
-        return current + 1;
-      });
-    }, 2600);
-    return () => window.clearInterval(timer);
-  }, [autoPlaying]);
+function RailHeader({ title, subtitle, onClose }: { title: string; subtitle: string; onClose: () => void }) {
+  return <header className="rail-header"><div className="agent-orb"><Bot /></div><div><h2>{title}</h2><p><CircleDot />{subtitle}</p></div><button className="rail-close" onClick={onClose} type="button" aria-label="收起侧栏"><X /></button></header>;
+}
 
-  const activeMode = useMemo(() => scene === 'discover' ? '找游戏' : scene === 'social' ? '找队友' : '陪你玩', [scene]);
+function DiscoverAgent({ messages, input, onInput, onSubmit, onQuick, onClose }: {
+  messages: ChatMessage[];
+  input: string;
+  onInput: (value: string) => void;
+  onSubmit: (event: FormEvent) => void;
+  onQuick: (value: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <aside className="assistant-rail">
+      <RailHeader title="WeGame Agent" subtitle="正在理解你的需求" onClose={onClose} />
+      <div className="rail-scroll discover-agent">
+        <div className="conversation">{messages.map((message) => <div key={message.id} className={`message ${message.role}`}>{message.text}</div>)}</div>
+        <section className="evidence-section"><h3>推荐依据</h3><div><Users />2 位好友正在游玩同款游戏</div><div><Clock3 />符合你约 40 分钟的空闲时间</div><div><Sparkles />你近期偏好合作、轻松节奏</div></section>
+      </div>
+      <div className="quick-prompts">{['只有 40 分钟', '想轻松一点', '想和朋友玩'].map((item) => <button key={item} onClick={() => onQuick(item)} type="button">{item}</button>)}</div>
+      <form className="rail-input" onSubmit={onSubmit}><input value={input} onChange={(event) => onInput(event.target.value)} placeholder="告诉 Agent 你今晚想怎么玩…" aria-label="告诉 Agent 游戏需求" /><button type="submit" aria-label="发送"><Send /></button></form>
+    </aside>
+  );
+}
 
-  const goScene = (next: Scene) => {
-    setDemoIndex(sceneIndex[next]);
-    setAutoPlaying(false);
+function CompanionAgent({ query, answer, onQuery, onSubmit, onQuick, onClose }: {
+  query: string;
+  answer: string;
+  onQuery: (value: string) => void;
+  onSubmit: (event: FormEvent) => void;
+  onQuick: (value: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <aside className="assistant-rail companion-agent">
+      <RailHeader title="WeGame Agent" subtitle="实时分析中" onClose={onClose} />
+      <div className="rail-scroll">
+        <section className="advice-card"><h3><ShieldAlert />关键建议</h3><div className="advice-copy"><strong>先别回下路，提前靠近核心资源区</strong><p>资源将在 45 秒后刷新，敌方下半区人数占优。</p><ol><li><span>01</span>清完当前兵线</li><li><span>02</span>从安全路线靠近河道</li><li><span>03</span>等打野到场再进入</li></ol></div></section>
+        <section className="answer-card"><span>Agent 回答</span><p>{answer}</p></section>
+      </div>
+      <div className="quick-prompts quick-prompts-grid">{['查当前攻略', '下一波怎么打', '装备怎么选'].map((item) => <button key={item} onClick={() => onQuick(item)} type="button">{item}</button>)}</div>
+      <form className="rail-input" onSubmit={onSubmit}><input value={query} onChange={(event) => onQuery(event.target.value)} placeholder="即时查攻略或询问技巧…" aria-label="向对局助手提问" /><button type="submit" aria-label="发送"><Send /></button></form>
+    </aside>
+  );
+}
+
+function CommunityAgent({ query, note, invited, onQuery, onSubmit, onInvite, onPublishTeam, onClose }: {
+  query: string;
+  note: string;
+  invited: string | null;
+  onQuery: (value: string) => void;
+  onSubmit: (event: FormEvent) => void;
+  onInvite: (name: string) => void;
+  onPublishTeam: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <aside className="assistant-rail community-agent">
+      <RailHeader title="AI 找搭子" subtitle="说出需求，我来匹配" onClose={onClose} />
+      <form className="mate-query" onSubmit={onSubmit}><label htmlFor="mate-query">你想找怎样的游戏搭子？</label><div><input id="mate-query" value={query} onChange={(event) => onQuery(event.target.value)} placeholder="例如：今晚两局、可开麦、不压力" /><button type="submit"><Sparkles />匹配</button></div>{note && <p><Check />{note}</p>}</form>
+      <div className="rail-section-title"><h3>推荐搭子</h3><button type="button">查看全部</button></div>
+      <div className="teammate-list">
+        {teammates.map((mate) => (
+          <article key={mate.name}>
+            <div className={`avatar ${mate.name === 'Cloud7' ? 'avatar-cloud' : 'avatar-mori'}`}>{mate.name.slice(0, 1)}</div>
+            <div className="mate-copy"><h4>{mate.name}<span>{mate.role}</span></h4><strong>{mate.score}% 合拍</strong><div className="tag-row">{mate.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</div><p><Clock3 />{mate.active}</p><small>{mate.reason}</small></div>
+            <button className={invited === mate.name ? 'invite-button invited' : 'invite-button'} onClick={() => onInvite(mate.name)} type="button">{invited === mate.name ? '已邀请' : '邀请'}</button>
+          </article>
+        ))}
+      </div>
+      <div className="publish-team-card"><p>没有合适的？让更多玩家看到你的需求。</p><button className="primary-button" onClick={onPublishTeam} type="button"><Plus />发布组队</button></div>
+    </aside>
+  );
+}
+
+export default function App() {
+  const [view, setView] = useState<View>('discover');
+  const [agentOpen, setAgentOpen] = useState(true);
+  const [toast, setToast] = useState('');
+  const [discoverInput, setDiscoverInput] = useState('');
+  const [discoverMessages, setDiscoverMessages] = useState<ChatMessage[]>([
+    { id: 1, role: 'agent', text: '晚上好。告诉我你有多少时间、想要什么节奏，我会帮你缩小选择。' },
+    { id: 2, role: 'user', text: '大概 40 分钟，想轻松一点，最好能和朋友玩。' },
+    { id: 3, role: 'agent', text: '明白。星港协作队最符合：两位好友在线，单局约 25 分钟，合作压力也较低。' },
+  ]);
+  const [companionQuery, setCompanionQuery] = useState('');
+  const [companionAnswer, setCompanionAnswer] = useState('我会结合当前局势回答；不确定的机制不会猜测。');
+  const [communityTab, setCommunityTab] = useState<CommunityTab>('recommend');
+  const [postText, setPostText] = useState('');
+  const [posts, setPosts] = useState<Post[]>(initialPosts);
+  const [mateQuery, setMateQuery] = useState('今晚两局，可开麦，不压力');
+  const [mateNote, setMateNote] = useState('');
+  const [invited, setInvited] = useState<string | null>(null);
+  const toastTimer = useRef<number | null>(null);
+
+  const showToast = (message: string) => {
+    setToast(message);
+    if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(''), 2400);
   };
 
-  const next = () => setDemoIndex((current) => Math.min(current + 1, demoSteps.length - 1));
-  const reset = () => { setDemoIndex(0); setAutoPlaying(false); setFallback('unavailable'); };
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.code === 'Space') {
+        event.preventDefault();
+        setAgentOpen((current) => !current);
+      }
+      if (event.key === 'Escape') setAgentOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  useEffect(() => () => { if (toastTimer.current) window.clearTimeout(toastTimer.current); }, []);
+
+  const navigate = (next: View) => { setView(next); setAgentOpen(true); };
+  const submitDiscover = (event: FormEvent) => {
+    event.preventDefault();
+    const query = discoverInput.trim();
+    if (!query) return;
+    const reply = query.includes('竞技') || query.includes('对战')
+      ? '如果更想要竞技反馈，我建议热血街场：平均 18 分钟一局，适合连续开两把。'
+      : query.includes('一个人') || query.includes('单人')
+        ? '一个人放松的话，浮岛工坊更合适。可以随时暂停，也不会错过进度。'
+        : '我会继续优先多人合作、短局和低压力体验。星港协作队仍是当前最合适的选择。';
+    setDiscoverMessages((current) => [...current, { id: Date.now(), role: 'user', text: query }, { id: Date.now() + 1, role: 'agent', text: reply }]);
+    setDiscoverInput('');
+  };
+  const quickDiscover = (value: string) => {
+    setDiscoverInput(value);
+    setDiscoverMessages((current) => [...current, { id: Date.now(), role: 'user', text: value }, { id: Date.now() + 1, role: 'agent', text: '收到，我已经把这个条件加入本次推荐。' }]);
+  };
+  const answerCompanion = (value: string) => {
+    const query = value.trim();
+    if (!query) return;
+    if (query.includes('装备')) setCompanionAnswer('当前更需要先补生存属性。经济落后时先保证能参加下一波资源团，再补输出。');
+    else if (query.includes('攻略')) setCompanionAnswer('当前版本的可靠攻略建议是：资源刷新前 60 秒结束边线行动，并和队友一起进入河道。');
+    else setCompanionAnswer('下一波先处理兵线，再从安全路线靠近资源区。不要先手探草，等打野到场后再推进。');
+    setCompanionQuery('');
+  };
+  const submitCompanion = (event: FormEvent) => { event.preventDefault(); answerCompanion(companionQuery); };
+  const publishPost = () => {
+    const content = postText.trim();
+    if (!content) { showToast('先写点内容再发布'); return; }
+    const isTeam = content.includes('队友') || content.includes('组队');
+    setPosts((current) => [{ id: Date.now(), user: 'NightFox', time: '刚刚', content, kind: isTeam ? 'team' : 'moment', tags: isTeam ? ['等待加入', '轻松游戏'] : undefined }, ...current]);
+    setPostText('');
+    showToast('动态已发布');
+  };
+  const submitMate = (event: FormEvent) => { event.preventDefault(); if (mateQuery.trim()) setMateNote('已按时间、沟通方式和游戏节奏重新排序'); };
+  const inviteMate = (name: string) => { setInvited(name); showToast(`已向 ${name} 发送组队邀请`); };
+  const pageTitle = useMemo(() => view === 'discover' ? 'AI 游戏推荐' : view === 'companion' ? '实时对局助手' : '游戏社区', [view]);
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[#060a12] text-slate-100">
-      <header className="app-header">
-        <div className="flex min-w-0 items-center gap-3 lg:min-w-[220px]">
-          <ProductLogo />
-          <div className="hidden sm:block"><p className="text-[15px] font-semibold tracking-tight">WeGame Agent</p><p className="text-[10px] text-cyan-300/65">AI GAME COMPANION</p></div>
-        </div>
-        <nav className="mx-auto flex h-full items-center gap-4 text-xs text-slate-500 sm:gap-8 sm:text-sm" aria-label="主导航">
-          <button onClick={() => goScene('discover')} className={`top-nav ${scene === 'discover' ? 'top-nav-active' : ''}`}>游戏库</button>
-          <button onClick={() => goScene('playing')} className={`top-nav ${scene === 'playing' || scene === 'post' ? 'top-nav-active' : ''}`}>对局助手</button>
-          <button onClick={() => goScene('social')} className={`top-nav ${scene === 'social' ? 'top-nav-active' : ''}`}>找队友</button>
-        </nav>
-        <div className="flex min-w-0 justify-end lg:min-w-[220px]"><div className="player-pill"><span className="size-2 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399]" /><span className="hidden sm:inline">玩家：</span>NightFox</div></div>
-      </header>
-
-      <div className="app-grid">
-        <aside className="app-sidebar">
-          <p className="mb-3 px-3 text-[10px] font-medium tracking-[0.16em] text-slate-600">AGENT MODE</p>
-          <div className="space-y-2">
-            {[
-              { label: '找游戏', icon: Search, scene: 'discover' as Scene },
-              { label: '陪你玩', icon: Gamepad2, scene: 'playing' as Scene },
-              { label: '找队友', icon: Users, scene: 'social' as Scene },
-            ].map(({ label, icon: Icon, scene: target }) => (
-              <button key={label} onClick={() => goScene(target)} className={`side-nav ${activeMode === label ? 'side-nav-active' : ''}`}>
-                <Icon className="size-4" /><span>{label}</span>{activeMode === label && <span className="ml-auto size-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_#67e8f9]" />}
-              </button>
-            ))}
-          </div>
-          <div className="mt-auto rounded-xl border border-cyan-400/10 bg-cyan-400/[0.035] p-3">
-            <div className="mb-2 flex items-center gap-2 text-xs text-cyan-200"><CircleDot className="size-3.5" /> 感知已开启</div>
-            <p className="text-[11px] leading-5 text-slate-500">仅在关键决策出现时提醒，不打断操作。</p>
-          </div>
-        </aside>
-
-        {scene === 'discover' && <DiscoveryScene onStart={() => setDemoIndex(1)} />}
-        {scene === 'playing' && <TacticalMap stage={playStage} />}
-        {scene === 'post' && <PostGameScene onSocial={() => setDemoIndex(7)} />}
-        {scene === 'social' && <SocialScene />}
-
-        <AgentPanel key={`${scene}-${playStage}-${fallback}`} scene={scene} playStage={playStage} fallback={fallback} />
+    <main className={`app-shell ${agentOpen ? 'agent-open' : 'agent-closed'}`}>
+      <Header view={view} onNavigate={navigate} agentOpen={agentOpen} onToggleAgent={() => setAgentOpen((current) => !current)} onUnavailable={() => showToast('当前 Demo 聚焦 AI 游戏助手核心旅程')} />
+      <div className="app-body">
+        <Sidebar view={view} onNavigate={navigate} />
+        {view === 'discover' && <DiscoverPage onStart={() => navigate('companion')} onAskWhy={() => setAgentOpen(true)} />}
+        {view === 'companion' && <CompanionPage onOpenAgent={() => setAgentOpen(true)} />}
+        {view === 'community' && <CommunityPage tab={communityTab} onTabChange={setCommunityTab} posts={posts} postText={postText} onPostTextChange={setPostText} onPublish={publishPost} />}
+        {agentOpen && view === 'discover' && <DiscoverAgent messages={discoverMessages} input={discoverInput} onInput={setDiscoverInput} onSubmit={submitDiscover} onQuick={quickDiscover} onClose={() => setAgentOpen(false)} />}
+        {agentOpen && view === 'companion' && <CompanionAgent query={companionQuery} answer={companionAnswer} onQuery={setCompanionQuery} onSubmit={submitCompanion} onQuick={answerCompanion} onClose={() => setAgentOpen(false)} />}
+        {agentOpen && view === 'community' && (
+          <CommunityAgent query={mateQuery} note={mateNote} invited={invited} onQuery={setMateQuery} onSubmit={submitMate} onInvite={inviteMate} onPublishTeam={() => { setPostText('今晚想找一位轻松开麦、不压力的队友一起玩两局。'); setCommunityTab('latest'); setAgentOpen(false); showToast('已为你生成组队帖子草稿'); }} onClose={() => setAgentOpen(false)} />
+        )}
       </div>
-
-      <footer className="demo-footer">
-        <Button onClick={() => setAutoPlaying((value) => !value)} size="sm" className="bg-cyan-300 text-slate-950 hover:bg-cyan-200">{autoPlaying ? <Pause className="size-3" /> : <Play className="size-3" />}{autoPlaying ? '暂停' : '自动演示'}</Button>
-        <button onClick={next} className="footer-action">下一事件</button>
-        <button onClick={reset} className="footer-action"><RotateCcw className="size-3" />重置</button>
-        <div className="mx-2 hidden h-1 flex-1 overflow-hidden rounded-full bg-white/5 sm:block"><div className="h-full rounded-full bg-gradient-to-r from-cyan-600 to-cyan-300 transition-all duration-500" style={{ width: `${progress}%` }} /></div>
-        <span className="hidden text-[10px] text-slate-600 xl:inline">{demoSteps[demoIndex].label}</span>
-        <button onClick={() => setDebugOpen(true)} className="footer-debug"><Bot className="size-3.5" />AI 调试台</button>
-        <span className="footer-scene">当前：<b>{scene === 'discover' ? '找游戏' : scene === 'playing' ? '对局中' : scene === 'post' ? '赛后复盘' : '找队友'}</b></span>
-      </footer>
-
-      <DebugSheet open={debugOpen} onOpenChange={setDebugOpen} scene={scene} fallback={fallback} onFallbackChange={setFallback} playStage={playStage} />
+      {!agentOpen && <button className="floating-agent" onClick={() => setAgentOpen(true)} type="button"><Bot /><span>打开 {pageTitle}</span><kbd>Ctrl Space</kbd></button>}
+      {toast && <output className="toast"><Check />{toast}</output>}
     </main>
   );
 }
