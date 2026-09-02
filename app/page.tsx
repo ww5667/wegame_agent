@@ -1,6 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ButtonHTMLAttributes,
+  type HTMLAttributes,
+} from 'react';
 import {
   Bot,
   Bug,
@@ -25,11 +31,28 @@ import {
   Users,
 } from 'lucide-react';
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-
 type Scene = 'discover' | 'playing' | 'post' | 'social';
 type FallbackMode = 'normal' | 'timeout' | 'no-knowledge';
+
+function Button({
+  className = '',
+  variant: _variant,
+  size = 'default',
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: 'default' | 'outline' | 'ghost';
+  size?: 'default' | 'sm' | 'icon-sm';
+}) {
+  return <button className={`ui-button ui-button-${size} ${className}`} {...props} />;
+}
+
+function Badge({
+  className = '',
+  variant: _variant,
+  ...props
+}: HTMLAttributes<HTMLSpanElement> & { variant?: 'default' | 'outline' }) {
+  return <span className={`ui-badge ${className}`} {...props} />;
+}
 
 const demoSteps: Array<{ scene: Scene; label: string }> = [
   { scene: 'discover', label: '理解今晚需求' },
