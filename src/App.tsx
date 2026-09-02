@@ -1,5 +1,3 @@
-'use client';
-
 import {
   useEffect,
   useMemo,
@@ -25,7 +23,6 @@ import {
   Send,
   ShieldAlert,
   Sparkles,
-  Swords,
   Trophy,
   UserPlus,
   Users,
@@ -362,11 +359,6 @@ function AgentPanel({
   const [acknowledged, setAcknowledged] = useState(false);
   const [quiet, setQuiet] = useState(false);
 
-  useEffect(() => {
-    setAnswer(null);
-    setAcknowledged(false);
-  }, [scene, playStage]);
-
   const ask = () => {
     if (!question.trim()) return;
     if (fallback === 'timeout') setAnswer('模型响应超时。已使用规则模板：先保证生存，再围绕下一地图资源行动。');
@@ -496,8 +488,9 @@ function DebugSheet({
   if (!open) return null;
 
   return (
-    <div className="debug-overlay" role="presentation" onMouseDown={() => onOpenChange(false)}>
-      <aside className="debug-drawer" role="dialog" aria-modal="true" aria-labelledby="debug-title" onMouseDown={(event) => event.stopPropagation()}>
+    <div className="debug-overlay">
+      <button type="button" className="debug-backdrop" aria-label="关闭 AI 调试台" onClick={() => onOpenChange(false)} />
+      <dialog open className="debug-drawer" aria-labelledby="debug-title">
         <header className="flex items-start justify-between border-b border-white/8 p-5">
           <div>
             <div className="flex items-center gap-2 text-cyan-300"><Bug className="size-4" /><h2 id="debug-title" className="text-sm font-semibold text-slate-100">AI 调试台</h2></div>
@@ -546,7 +539,7 @@ function DebugSheet({
             </div>
           </div>}
         </div>
-      </aside>
+      </dialog>
     </div>
   );
 }
@@ -625,7 +618,7 @@ export default function Home() {
         {scene === 'post' && <PostGameScene onSocial={() => setDemoIndex(7)} />}
         {scene === 'social' && <SocialScene />}
 
-        <AgentPanel scene={scene} playStage={playStage} fallback={fallback} />
+        <AgentPanel key={`${scene}-${playStage}`} scene={scene} playStage={playStage} fallback={fallback} />
       </div>
 
       <footer className="demo-footer">

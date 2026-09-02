@@ -2,7 +2,7 @@
 
 > 理解玩家当前游戏状态的全旅程 AI 游戏助手概念 Demo。
 
-[在线体验 WeGame Agent Demo](https://wegame-agent-demo.zhaoyijie1949.chatgpt.site)
+[在线体验 WeGame Agent Demo](https://ww5667.github.io/wegame_agent/)
 
 > 本项目为产品概念验证与交互原型，并非腾讯或 WeGame 官方产品。
 
@@ -34,7 +34,7 @@ WeGame Agent 希望把传统的“游戏启动器”升级为理解玩家完整�
 
 ## 推荐演示流程
 
-1. 打开[在线 Demo](https://wegame-agent-demo.zhaoyijie1949.chatgpt.site)。
+1. 打开[在线 Demo](https://ww5667.github.io/wegame_agent/)。
 2. 点击底部的“自动演示”，观看“找游戏 → 对局辅助 → 赛后复盘 → 找队友”的完整流程。
 3. 在关键建议出现后点击“为什么？”，查看 Agent 的解释。
 4. 打开“AI 调试台”，切换“模型正常 / 模拟超时 / 知识不足”。
@@ -71,12 +71,18 @@ WeGame Agent 希望把传统的“游戏启动器”升级为理解玩家完整�
 ## 技术实现
 
 - React 19 + TypeScript
-- Vinext + Vite
+- Vite 8
 - Tailwind CSS
 - Lucide 图标
 - 本地事件状态机
 - 响应式桌面端界面
-- Sites 部署
+- GitHub Actions + GitHub Pages 自动部署
+
+## 在线部署
+
+项目通过 `.github/workflows/deploy-pages.yml` 接入 GitHub Pages。每次向 `main` 分支推送代码后，GitHub Actions 会自动完成依赖安装、静态构建和线上发布。
+
+线上地址：<https://ww5667.github.io/wegame_agent/>
 
 ## 本地运行
 
@@ -98,13 +104,14 @@ npm run build
 ## 项目结构
 
 ```text
-app/
-├── page.tsx       # Demo 场景、状态机和主要交互
-├── globals.css    # 视觉主题和响应式样式
-└── layout.tsx     # 页面元信息
+src/
+├── App.tsx        # Demo 场景、状态机和主要交互
+├── index.css      # 视觉主题和响应式样式
+└── main.tsx       # Vite 应用入口
 
-components/ui/     # 基础 UI 组件
-.openai/           # Sites 部署配置
+.github/workflows/ # GitHub Pages 自动部署
+index.html         # 静态页面入口
+vite.config.ts     # Vite 与仓库子路径配置
 ```
 
 ## 当前边界
