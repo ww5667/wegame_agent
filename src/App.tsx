@@ -312,18 +312,20 @@ function CommunityAgent({ query, note, invited, onQuery, onSubmit, onInvite, onP
   return (
     <aside className="assistant-rail community-agent">
       <RailHeader title="AI 找搭子" subtitle="说出需求，我来匹配" onClose={onClose} />
-      <form className="mate-query" onSubmit={onSubmit}><label htmlFor="mate-query">你想找怎样的游戏搭子？</label><div><input id="mate-query" value={query} onChange={(event) => onQuery(event.target.value)} placeholder="例如：今晚两局、可开麦、不压力" /><button type="submit"><Sparkles />匹配</button></div>{note && <p><Check />{note}</p>}</form>
-      <div className="rail-section-title"><h3>推荐搭子</h3><button type="button">查看全部</button></div>
-      <div className="teammate-list">
-        {teammates.map((mate) => (
-          <article key={mate.name}>
-            <div className={`avatar ${mate.name === 'Cloud7' ? 'avatar-cloud' : 'avatar-mori'}`}>{mate.name.slice(0, 1)}</div>
-            <div className="mate-copy"><h4>{mate.name}<span>{mate.role}</span></h4><strong>{mate.score}% 合拍</strong><div className="tag-row">{mate.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</div><p><Clock3 />{mate.active}</p><small>{mate.reason}</small></div>
-            <button className={invited === mate.name ? 'invite-button invited' : 'invite-button'} onClick={() => onInvite(mate.name)} type="button">{invited === mate.name ? '已邀请' : '邀请'}</button>
-          </article>
-        ))}
+      <div className="rail-scroll community-agent-scroll">
+        <form className="mate-query" onSubmit={onSubmit}><label htmlFor="mate-query">你想找怎样的游戏搭子？</label><div><input id="mate-query" value={query} onChange={(event) => onQuery(event.target.value)} placeholder="例如：今晚两局、可开麦、不压力" /><button type="submit"><Sparkles />匹配</button></div>{note && <p><Check />{note}</p>}</form>
+        <div className="rail-section-title"><h3>推荐搭子</h3><button type="button">查看全部</button></div>
+        <div className="teammate-list">
+          {teammates.map((mate) => (
+            <article key={mate.name}>
+              <div className={`avatar ${mate.name === 'Cloud7' ? 'avatar-cloud' : 'avatar-mori'}`}>{mate.name.slice(0, 1)}</div>
+              <div className="mate-copy"><h4>{mate.name}<span>{mate.role}</span></h4><strong>{mate.score}% 合拍</strong><div className="tag-row">{mate.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</div><p><Clock3 />{mate.active}</p><small>{mate.reason}</small></div>
+              <button className={invited === mate.name ? 'invite-button invited' : 'invite-button'} onClick={() => onInvite(mate.name)} type="button">{invited === mate.name ? '已邀请' : '邀请'}</button>
+            </article>
+          ))}
+        </div>
+        <div className="publish-team-card"><p>没有合适的？让更多玩家看到你的需求。</p><button className="primary-button" onClick={onPublishTeam} type="button"><Plus />发布组队</button></div>
       </div>
-      <div className="publish-team-card"><p>没有合适的？让更多玩家看到你的需求。</p><button className="primary-button" onClick={onPublishTeam} type="button"><Plus />发布组队</button></div>
     </aside>
   );
 }
