@@ -6,6 +6,7 @@ import {
   type FormEvent,
 } from 'react';
 import {
+  ArrowLeft,
   Bell,
   Bot,
   Check,
@@ -22,6 +23,7 @@ import {
   Search,
   Send,
   ShieldAlert,
+  SlidersHorizontal,
   Sparkles,
   Swords,
   Target,
@@ -31,7 +33,7 @@ import {
   X,
 } from 'lucide-react';
 
-type View = 'discover' | 'companion' | 'community';
+type View = 'discover' | 'companion' | 'community' | 'teamup';
 type CommunityTab = 'recommend' | 'following' | 'latest';
 type ChatMessage = { id: number; role: 'agent' | 'user'; text: string };
 type Post = {
@@ -50,9 +52,26 @@ const games = [
 ];
 
 const teammates = [
-  { name: 'Cloud7', role: '打野', score: 92, tags: ['团队', '可开麦'], active: '20:00—23:00', reason: '习惯围绕团队资源行动，沟通直接但不施压。' },
-  { name: 'Mori', role: '辅助', score: 87, tags: ['稳健', '不压力'], active: '19:30—22:30', reason: '活跃时间与你重合，偏好轻松配合和连续组队。' },
+  { name: 'Cloud7', role: '打野', score: 92, tags: ['团队', '可开麦', '轻松局'], active: '20:00—23:00', game: '热血街场', level: '钻石 II', sessions: '近 7 天组队 12 次', reason: '习惯围绕团队资源行动，沟通直接但不施压。', evidence: ['活跃时间重合 96%', '同段位且常用位置互补', '都偏好连续玩 2—3 局'] },
+  { name: 'Mori', role: '辅助', score: 87, tags: ['稳健', '不压力', '耐心沟通'], active: '19:30—22:30', game: '星港协作队', level: '铂金 I', sessions: '近 7 天组队 8 次', reason: '活跃时间与你重合，偏好轻松配合和连续组队。', evidence: ['交流风格高度相似', '最近也在寻找固定队友', '失败局中途退出率低'] },
+  { name: 'Kite', role: '中路', score: 84, tags: ['补位', '短局', '会复盘'], active: '21:00—00:00', game: '热血街场', level: '钻石 IV', sessions: '近 7 天组队 6 次', reason: '擅长补位和报点，适合临时开黑与短时间组队。', evidence: ['常玩模式与你一致', '平均响应邀请仅 3 分钟', '组队评价 4.8 / 5'] },
+  { name: 'Rin', role: '射手', score: 81, tags: ['可开麦', '不甩锅', '周末在线'], active: '20:30—23:30', game: '热血街场', level: '铂金 III', sessions: '近 7 天组队 9 次', reason: '节奏稳、愿意听指挥，适合以完成每日任务为目标的轻松局。', evidence: ['本周在线时间相近', '都开启了友好交流偏好', '常用英雄池互补'] },
 ];
+
+const viewFromHash = (): View => {
+  const route = window.location.hash.replace(/^#\/?/, '');
+  if (route === 'match') return 'companion';
+  if (route === 'community/teamup') return 'teamup';
+  if (route === 'community') return 'community';
+  return 'discover';
+};
+
+const routeForView: Record<View, string> = {
+  discover: '#/discover',
+  companion: '#/match',
+  community: '#/community',
+  teamup: '#/community/teamup',
+};
 
 const initialPosts: Post[] = [
   { id: 1, user: 'Mori', time: '2 小时前', content: '第一次三人协作通关，最后十秒真的太惊险了。', kind: 'moment' },
@@ -79,8 +98,8 @@ function Header({ view, onNavigate, agentOpen, onToggleAgent, onUnavailable }: {
     <header className="app-header">
       <Brand />
       <nav className="top-nav" aria-label="主导航">
-        <button className={view !== 'community' ? 'active' : ''} onClick={() => onNavigate('discover')} type="button">主页</button>
-        <button className={view === 'community' ? 'active' : ''} onClick={() => onNavigate('community')} type="button">社区</button>
+        <button className={view === 'discover' || view === 'companion' ? 'active' : ''} onClick={() => onNavigate('discover')} type="button">主页</button>
+        <button className={view === 'community' || view === 'teamup' ? 'active' : ''} onClick={() => onNavigate('community')} type="button">社区</button>
         <button onClick={onUnavailable} type="button">商店</button>
         <button onClick={onUnavailable} type="button">测试区</button>
         <button onClick={onUnavailable} type="button">直播</button>
@@ -105,14 +124,14 @@ function GameCover({ src }: { src: string }) {
 }
 
 function Sidebar({ view, onNavigate }: { view: View; onNavigate: (view: View) => void }) {
-  if (view === 'community') {
+  if (view === 'community' || view === 'teamup') {
     return (
       <aside className="sidebar community-sidebar">
         <h2>社区</h2>
         <nav className="side-navigation" aria-label="社区导航">
-          <button className="active" type="button"><Sparkles />推荐</button>
-          <button type="button"><Heart />关注</button>
-          <button type="button"><UserPlus />找队友</button>
+          <button className={view === 'community' ? 'active' : ''} onClick={() => onNavigate('community')} type="button"><Sparkles />推荐</button>
+          <button onClick={() => onNavigate('community')} type="button"><Heart />关注</button>
+          <button className={view === 'teamup' ? 'active' : ''} onClick={() => onNavigate('teamup')} type="button"><UserPlus />找队友</button>
         </nav>
         <div className="side-divider" />
         <p className="side-label">我的圈子</p>
@@ -185,6 +204,7 @@ function TacticalBoard() {
   return (
     <div className="match-card">
       <div className="tactical-board" aria-label="虚构竞技游戏的实时战术地图">
+        <img className="tactical-background" src={`${import.meta.env.BASE_URL}match-arena.webp`} alt="" aria-hidden="true" />
         <span className="lane lane-one" /><span className="lane lane-two" /><span className="lane lane-three" />
         <span className="map-zone zone-a" /><span className="map-zone zone-b" />
         <span className="map-marker ally ally-a" /><span className="map-marker ally ally-b" /><span className="map-marker ally ally-c" />
@@ -218,18 +238,19 @@ function CompanionPage({ onOpenAgent }: { onOpenAgent: () => void }) {
   );
 }
 
-function CommunityPage({ tab, onTabChange, posts, postText, onPostTextChange, onPublish }: {
+function CommunityPage({ tab, onTabChange, posts, postText, onPostTextChange, onPublish, onTeamUp }: {
   tab: CommunityTab;
   onTabChange: (tab: CommunityTab) => void;
   posts: Post[];
   postText: string;
   onPostTextChange: (value: string) => void;
   onPublish: () => void;
+  onTeamUp: () => void;
 }) {
   const shownPosts = tab === 'following' ? posts.filter((post) => post.user === 'Mori') : posts;
   return (
     <section className="workspace community-page">
-      <div className="community-title"><h1>社区</h1></div>
+      <div className="community-title"><h1>社区</h1><button className="outline-button community-teamup-link" onClick={onTeamUp} type="button"><UserPlus />找队友</button></div>
       <div className="community-tabs" role="tablist" aria-label="社区动态分类">
         {[['recommend', '推荐'], ['following', '关注'], ['latest', '最新']].map(([value, label]) => <button key={value} className={tab === value ? 'active' : ''} onClick={() => onTabChange(value as CommunityTab)} type="button" role="tab" aria-selected={tab === value}>{label}</button>)}
       </div>
@@ -249,6 +270,55 @@ function CommunityPage({ tab, onTabChange, posts, postText, onPostTextChange, on
           </article>
         ))}
       </div>
+    </section>
+  );
+}
+
+function TeamUpPage({ query, note, invited, onQuery, onSubmit, onInvite, onBack, onPublishTeam }: {
+  query: string;
+  note: string;
+  invited: string | null;
+  onQuery: (value: string) => void;
+  onSubmit: (event: FormEvent) => void;
+  onInvite: (name: string) => void;
+  onBack: () => void;
+  onPublishTeam: () => void;
+}) {
+  const quickNeeds = ['今晚两局', '可开麦', '不压力'];
+  return (
+    <section className="workspace teamup-page">
+      <button className="teamup-back" onClick={onBack} type="button"><ArrowLeft />返回社区</button>
+      <header className="teamup-heading">
+        <div><span className="teamup-kicker"><Sparkles />AI 找搭子</span><h1>找到合拍的人，再开一局</h1><p>告诉我你的时间、位置和交流习惯，我会说明每一次推荐为什么适合你。</p></div>
+        <div className="teamup-status"><span><CircleDot />当前在线</span><strong>1,284</strong><small>位玩家正在找队友</small></div>
+      </header>
+
+      <form className="teamup-search" onSubmit={onSubmit}>
+        <div className="teamup-search-copy"><Bot /><div><label htmlFor="teamup-query">这次想找怎样的搭子？</label><p>AI 会综合在线时间、常用位置与沟通偏好</p></div></div>
+        <div className="teamup-search-input"><input id="teamup-query" value={query} onChange={(event) => onQuery(event.target.value)} placeholder="例如：今晚玩两局，补位，可开麦，不压力" /><button className="primary-button" type="submit"><Sparkles />开始匹配</button></div>
+        <div className="teamup-quick"><span>快捷条件</span>{quickNeeds.map((item) => <button key={item} onClick={() => onQuery(query.includes(item) ? query : `${query}${query ? '，' : ''}${item}`)} type="button">+ {item}</button>)}</div>
+        {note && <output className="teamup-note"><Check />{note}，已找到 {teammates.length} 位优先推荐</output>}
+      </form>
+
+      <div className="teamup-results-heading"><div><h2>为你推荐</h2><p>基于你今晚的组队需求排序</p></div><button type="button"><SlidersHorizontal />筛选</button></div>
+      <div className="teamup-grid">
+        {teammates.map((mate, index) => (
+          <article className="teamup-card" key={mate.name}>
+            <header>
+              <div className={`avatar teamup-avatar ${mate.name === 'Mori' ? 'avatar-mori' : 'avatar-cloud'}`}>{mate.name.slice(0, 1)}</div>
+              <div className="teamup-person"><h3>{mate.name}<span className="online-dot" /></h3><p>{mate.game} · {mate.level} · {mate.role}</p></div>
+              <div className="compatibility"><strong>{mate.score}%</strong><span>合拍度</span></div>
+            </header>
+            <p className="mate-reason">{mate.reason}</p>
+            <div className="teamup-tags">{mate.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</div>
+            <dl className="mate-meta"><div><dt>常在线</dt><dd><Clock3 />{mate.active}</dd></div><div><dt>近期活跃</dt><dd><Gamepad2 />{mate.sessions}</dd></div></dl>
+            <section className="match-evidence"><h4><Sparkles />AI 匹配理由</h4><ul>{mate.evidence.map((item) => <li key={item}><Check />{item}</li>)}</ul></section>
+            <footer><button className="outline-button" type="button">查看主页</button><button className={`primary-button ${invited === mate.name ? 'invited' : ''}`} onClick={() => onInvite(mate.name)} type="button">{invited === mate.name ? <><Check />已邀请</> : <><UserPlus />邀请组队</>}</button></footer>
+            {index === 0 && <span className="best-match">最适合今晚</span>}
+          </article>
+        ))}
+      </div>
+      <div className="teamup-publish"><div><Plus /><span><strong>还没找到合适的人？</strong><small>发布公开组队需求，让更多合适的玩家看到你。</small></span></div><button className="outline-button" onClick={onPublishTeam} type="button">发布组队</button></div>
     </section>
   );
 }
@@ -331,8 +401,8 @@ function CommunityAgent({ query, note, invited, onQuery, onSubmit, onInvite, onP
 }
 
 export default function App() {
-  const [view, setView] = useState<View>('discover');
-  const [agentOpen, setAgentOpen] = useState(true);
+  const [view, setView] = useState<View>(viewFromHash);
+  const [agentOpen, setAgentOpen] = useState(() => viewFromHash() !== 'teamup');
   const [toast, setToast] = useState('');
   const [discoverInput, setDiscoverInput] = useState('');
   const [discoverMessages, setDiscoverMessages] = useState<ChatMessage[]>([
@@ -368,9 +438,24 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  useEffect(() => {
+    if (!window.location.hash) window.history.replaceState(null, '', routeForView.discover);
+    const syncRoute = () => {
+      const next = viewFromHash();
+      setView(next);
+      if (next === 'teamup') setAgentOpen(false);
+    };
+    window.addEventListener('hashchange', syncRoute);
+    return () => window.removeEventListener('hashchange', syncRoute);
+  }, []);
+
   useEffect(() => () => { if (toastTimer.current) window.clearTimeout(toastTimer.current); }, []);
 
-  const navigate = (next: View) => { setView(next); setAgentOpen(true); };
+  const navigate = (next: View) => {
+    if (window.location.hash !== routeForView[next]) window.location.hash = routeForView[next];
+    setView(next);
+    setAgentOpen(next !== 'teamup');
+  };
   const submitDiscover = (event: FormEvent) => {
     event.preventDefault();
     const query = discoverInput.trim();
@@ -406,7 +491,14 @@ export default function App() {
   };
   const submitMate = (event: FormEvent) => { event.preventDefault(); if (mateQuery.trim()) setMateNote('已按时间、沟通方式和游戏节奏重新排序'); };
   const inviteMate = (name: string) => { setInvited(name); showToast(`已向 ${name} 发送组队邀请`); };
-  const pageTitle = useMemo(() => view === 'discover' ? 'AI 游戏推荐' : view === 'companion' ? '实时对局助手' : '游戏社区', [view]);
+  const pageTitle = useMemo(() => view === 'discover' ? 'AI 游戏推荐' : view === 'companion' ? '实时对局助手' : view === 'teamup' ? 'AI 找搭子' : '游戏社区', [view]);
+  const publishTeamDraft = () => {
+    setPostText('今晚想找一位轻松开麦、不压力的队友一起玩两局。');
+    setCommunityTab('latest');
+    navigate('community');
+    setAgentOpen(false);
+    showToast('已为你生成组队帖子草稿');
+  };
 
   return (
     <main className={`app-shell ${agentOpen ? 'agent-open' : 'agent-closed'}`}>
@@ -415,11 +507,12 @@ export default function App() {
         <Sidebar view={view} onNavigate={navigate} />
         {view === 'discover' && <DiscoverPage onStart={() => navigate('companion')} onAskWhy={() => setAgentOpen(true)} />}
         {view === 'companion' && <CompanionPage onOpenAgent={() => setAgentOpen(true)} />}
-        {view === 'community' && <CommunityPage tab={communityTab} onTabChange={setCommunityTab} posts={posts} postText={postText} onPostTextChange={setPostText} onPublish={publishPost} />}
+        {view === 'community' && <CommunityPage tab={communityTab} onTabChange={setCommunityTab} posts={posts} postText={postText} onPostTextChange={setPostText} onPublish={publishPost} onTeamUp={() => navigate('teamup')} />}
+        {view === 'teamup' && <TeamUpPage query={mateQuery} note={mateNote} invited={invited} onQuery={setMateQuery} onSubmit={submitMate} onInvite={inviteMate} onBack={() => navigate('community')} onPublishTeam={publishTeamDraft} />}
         {agentOpen && view === 'discover' && <DiscoverAgent messages={discoverMessages} input={discoverInput} onInput={setDiscoverInput} onSubmit={submitDiscover} onQuick={quickDiscover} onClose={() => setAgentOpen(false)} />}
         {agentOpen && view === 'companion' && <CompanionAgent query={companionQuery} answer={companionAnswer} onQuery={setCompanionQuery} onSubmit={submitCompanion} onQuick={answerCompanion} onClose={() => setAgentOpen(false)} />}
-        {agentOpen && view === 'community' && (
-          <CommunityAgent query={mateQuery} note={mateNote} invited={invited} onQuery={setMateQuery} onSubmit={submitMate} onInvite={inviteMate} onPublishTeam={() => { setPostText('今晚想找一位轻松开麦、不压力的队友一起玩两局。'); setCommunityTab('latest'); setAgentOpen(false); showToast('已为你生成组队帖子草稿'); }} onClose={() => setAgentOpen(false)} />
+        {agentOpen && (view === 'community' || view === 'teamup') && (
+          <CommunityAgent query={mateQuery} note={mateNote} invited={invited} onQuery={setMateQuery} onSubmit={submitMate} onInvite={inviteMate} onPublishTeam={publishTeamDraft} onClose={() => setAgentOpen(false)} />
         )}
       </div>
       {!agentOpen && <button className="floating-agent" onClick={() => setAgentOpen(true)} type="button"><Bot /><span>打开 {pageTitle}</span><kbd>Ctrl Space</kbd></button>}
