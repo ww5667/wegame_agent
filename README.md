@@ -1,6 +1,6 @@
 # WeGame Agent Demo
 
-> 融入游戏启动器的全旅程 AI 游戏助手概念 Demo：帮玩家选游戏、陪玩家打游戏，也帮玩家找到合适的游戏搭子。
+> 融入游戏平台的全旅程 AI 游戏助手概念 Demo：帮玩家选游戏、陪玩家打游戏，也帮玩家找到合适的游戏搭子。
 
 [在线体验 WeGame Agent Demo](https://ww5667.github.io/wegame_agent/)
 
